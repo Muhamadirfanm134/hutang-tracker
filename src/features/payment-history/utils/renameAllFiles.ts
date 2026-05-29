@@ -4,40 +4,46 @@ export async function renameAllFiles() {
   const bucket = "payment_attachment";
   const folder = "4220b617-75d9-499b-87cb-06f8b597a914";
 
-  const { data: files, error } = await supabase.storage.from(bucket).list(folder, { limit: 1000 });
+  const { data: files, error } = await supabase.storage.from(bucket).list(folder);
 
   if (error) {
     console.error("List error:", error);
     return;
   }
 
-  if (!files || files.length === 0) {
-    console.log("Tidak ada file dalam folder.");
-    return;
-  }
+  for (const file of files ?? []) {
+    const oldPath = `${folder}/${file.name}`;
 
-  for (const file of files) {
-    console.log("RAW FILE:", file);
+    // Remove leading number + dot
+    const nameWithoutNumber = file.name.replace(/^\d+\.\s*/, "");
 
-    const oldPath = folder + "/" + file.name;
+    // Split extension
+    const [rawName, ext] = nameWithoutNumber.split(/\.(?=[^\.]+$)/);
 
-    console.log("TRY MOVE FROM:", oldPath);
+    // Clean name
+    const cleaned = rawName
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^\w\-]/g, "");
 
-    // const { error: moveError } = await supabase.storage
-    //   .from(bucket)
-    //   .move(oldPath, oldPath + ".test");
-    const { error: moveError } = await supabase.storage
-      .from(bucket)
-      .move(
-        "4220b617-75d9-499b-87cb-06f8b597a914/1. 25 Juni 2024.jpeg",
-        "4220b617-75d9-499b-87cb-06f8b597a914/test.jpeg"
-      );
+    const timestamp = Date.now();
 
-    console.log(error);
+    const newName = `${cleaned}-${timestamp}.${ext}`;
 
-    console.log("ERROR:", moveError);
+    const newPath = `${folder}/${newName}`;
 
-    break; // test 1 file dulu
+    if (oldPath === newPath) continue;
+
+    console.log("Moving:", oldPath, "→", newPath);
+
+    const { error: moveError } = await supabase.storage.from(bucket).move(oldPath, newPath);
+
+    if (moveError) {
+      console.error("Move error:", moveError);
+      continue;
+    }
+
+    console.log("Renamed:", newName);
   }
 
   console.log("DONE");

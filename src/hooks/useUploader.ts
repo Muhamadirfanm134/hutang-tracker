@@ -1,6 +1,6 @@
 'use client';
 
-import { supabase } from '@/utils/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -8,9 +8,9 @@ export function useUploader(bucket: string) {
   const [progress, setProgress] = useState<number>(0);
 
   const mutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, customPath }: { file: File; customPath?: string }) => {
       return new Promise<string>((resolve, reject) => {
-        const filePath = `${Date.now()}-${file.name}`;
+        const filePath = customPath || `${Date.now()}-${file.name}`;
         console.log(filePath);
         const xhr = new XMLHttpRequest();
 
@@ -37,7 +37,7 @@ export function useUploader(bucket: string) {
         supabase.storage
           .from(bucket)
           .createSignedUploadUrl(filePath)
-          .then(({ data, error }) => {
+          .then(({ data, error }: { data: any; error: any }) => {
             if (error) return reject(error);
             const formData = new FormData();
             formData.append('file', file);
@@ -49,10 +49,10 @@ export function useUploader(bucket: string) {
     },
   });
 
-  const uploadFile = async (file: File): Promise<string | null> => {
+  const uploadFile = async (file: File, customPath?: string): Promise<string | null> => {
     try {
       setProgress(0);
-      const path = await mutation.mutateAsync(file);
+      const path = await mutation.mutateAsync({ file, customPath });
       return path;
     } catch (err) {
       console.error('Upload failed:', err);

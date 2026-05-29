@@ -19,13 +19,20 @@ interface RegisterParams {
   password: string;
 }
 
+interface Profile {
+  id: string;
+  fullname: string | null;
+  email: string | null;
+  role: "admin" | "user";
+}
+
 export function useAuth() {
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
 
   // --- ✅ FETCH SESSION & USER
-  const { data: session, isLoading } = useQuery({
+  const { data: session, isLoading: isLoadingSession } = useQuery({
     queryKey: ["session"],
     queryFn: async () => {
       const { data, error } = await supabase.auth.getSession();
@@ -37,10 +44,38 @@ export function useAuth() {
 
   const user = session?.user ?? null;
 
+  // --- 📋 FETCH PROFILE (role from profiles table)
+  const { data: profile, isLoading: isLoadingProfile } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+      if (error) {
+        console.error("Failed to fetch profile:", error.message);
+        return null;
+      }
+      return data as Profile;
+    },
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const isLoading = isLoadingSession || (!!user && isLoadingProfile);
+  const role = profile?.role || "user";
+  const isAdmin = role === "admin";
+
   // --- 🔄 LISTEN REALTIME AUTH CHANGES
   useEffect(() => {
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       queryClient.setQueryData(["session"], newSession);
+      // Refetch profile when auth state changes
+      if (newSession?.user) {
+        queryClient.invalidateQueries({ queryKey: ["profile", newSession.user.id] });
+      }
     });
     return () => {
       subscription.subscription.unsubscribe();
@@ -49,7 +84,7 @@ export function useAuth() {
 
   // --- 🚦 AUTO REDIRECT LOGIC
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoadingSession) return;
 
     const authPages = ["/login", "/register"];
     const isAuthPage = authPages.includes(pathname);
@@ -59,7 +94,7 @@ export function useAuth() {
     } else if (user && isAuthPage) {
       router.replace("/home");
     }
-  }, [user, isLoading, pathname, router]);
+  }, [user, isLoadingSession, pathname, router]);
 
   // --- 🔐 LOGIN MUTATION
   const loginMutation = useMutation<Session | null, Error, LoginParams>({
@@ -71,7 +106,8 @@ export function useAuth() {
     onSuccess: (session) => {
       if (session) {
         queryClient.setQueryData(["session"], session);
-        console.log("✅ Login success:", session.user.email);
+        // Fetch profile immediately after login
+        queryClient.invalidateQueries({ queryKey: ["profile", session.user.id] });
       }
       toast({
         title: "Login berhasil",
@@ -97,10 +133,11 @@ export function useAuth() {
         email,
         password,
         options: {
-          data: { fullname },
+          data: { fullname, role: "user" },
         },
       });
       if (error) throw error;
+      // Note: The DB trigger will auto-create a profiles row with role='user'
     },
     onSuccess: () => {
       toast({
@@ -127,6 +164,7 @@ export function useAuth() {
     },
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: ["session"] });
+      queryClient.removeQueries({ queryKey: ["profile"] });
       router.replace("/login");
       toast({
         title: "Logout berhasil",
@@ -139,7 +177,10 @@ export function useAuth() {
   return {
     user,
     session,
+    profile,
     isLoading,
+    role,
+    isAdmin,
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,

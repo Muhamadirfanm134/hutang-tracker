@@ -9,22 +9,28 @@ export type PaymentTypeType = z.infer<typeof PaymentTypeCodeEnum>;
  */
 export const paymentSchema = z.object({
   id: z.string().uuid(),
-  created_at: z.string().datetime({ offset: true }), // ISO with timezone
+  created_at: z.string(),
+  debt_id: z.string().uuid(),
   type: PaymentTypeCodeEnum,
-  nominal: z.coerce.number().int().nonnegative(),
-  payment_attachment: z.string().url("Attachment must be a valid URL").optional().nullable(),
-  payment_period: z.string().min(1, "Payment period is required"),
-  cicilan_ke: z.number(),
+  amount: z.coerce.number().int().nonnegative(),
+  payment_attachment: z.array(z.string()).optional().nullable(),
+  pembayaran_ke: z.coerce.number().int().nonnegative(),
+  note: z.string().optional().nullable(),
+  sisa_pembayaran: z.coerce.number().int().optional().nullable(),
 });
 
 /**
  * Insert Schema
  * id & created_at biasanya auto-generated
  */
-export const createPaymentSchema = paymentSchema.omit({
-  id: true,
-  created_at: true,
-});
+export const createPaymentSchema = paymentSchema
+  .omit({
+    id: true,
+    created_at: true,
+  })
+  .extend({
+    created_at: z.string().optional(),
+  });
 
 /**
  * Update Schema

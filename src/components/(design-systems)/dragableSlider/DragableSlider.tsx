@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from 'react';
 import Image from 'next/image';
-import { SwipeIcon } from '@/components/ui/Icon';
+import { ChevronsLeftRight } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 
 interface DragableSliderProps {
@@ -87,7 +87,7 @@ const DragableSlider: React.FC<DragableSliderProps> = ({
         onTouchStart={startDrag}
       >
         <div className="absolute top-1/2 left-1/2 z-30 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-orange-500 bg-white shadow-md">
-          <SwipeIcon className="text-(--color-primary-500)" />
+          <ChevronsLeftRight className="h-5 w-5 text-orange-500" />
         </div>
       </div>
     </div>

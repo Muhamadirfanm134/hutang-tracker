@@ -1,25 +1,37 @@
-'use client';
-
-import { OnChange, Option } from '@/lib/types';
-import { truncateToOneLine } from '@/utils/stringManipulations';
 import {
   Listbox,
   ListboxButton,
   ListboxOption,
   ListboxOptions,
 } from '@headlessui/react';
-import { ChevronDownIcon } from '@heroicons/react/16/solid';
-import { CheckIcon } from '@heroicons/react/20/solid';
+import { ChevronDown, Check } from 'lucide-react';
 import clsx from 'clsx';
 import Image from 'next/image';
+
+export interface Option {
+  id: string | number;
+  value: string;
+  label: string;
+  icon?: string;
+}
+
+export interface OnChange {
+  name: string;
+  value: any;
+}
+
+function truncateToOneLine(str: string, maxLen: number) {
+  if (str.length <= maxLen) return str;
+  return str.slice(0, maxLen) + '...';
+}
 
 type SelectInputProps = {
   options: Option[];
   selected?: string;
   onChange: (value: OnChange) => void;
-  rounded?: 'md' | 'lg' | 'full';
+  rounded?: 'none' | 'sm' | 'md' | 'lg' | 'full';
   width?: string;
-  icon?: React.SVGProps<SVGSVGElement>;
+  icon?: React.ReactNode;
   className?: string;
   placeholder?: string;
   name: string;
@@ -71,8 +83,8 @@ export default function SelectInput({
           ) : (
             <div className="text-sm text-(--color-grey-500)">{placeholder}</div>
           )}
-          <ChevronDownIcon
-            className="group pointer-events-none absolute right-4 size-4 fill-(--color-grey-800)"
+          <ChevronDown
+            className="pointer-events-none absolute right-4 h-4 w-4 text-gray-500"
             aria-hidden="true"
           />
         </ListboxButton>
@@ -93,9 +105,9 @@ export default function SelectInput({
               {option.icon ? (
                 <Image src={option.icon} alt="icon" width={20} height={20} />
               ) : (
-                <CheckIcon className="invisible size-4 fill-(--color-primary-500) group-data-selected:visible" />
+                <Check className="invisible h-4 w-4 text-primary group-data-selected:visible" />
               )}
-              <div className="text-sm/6 text-(--color-grey-800) group-data-selected:text-(--color-primary-500)">
+              <div className="text-sm/6 text-(--color-grey-800) group-data-selected:text-primary">
                 {option.label}
               </div>
             </ListboxOption>

@@ -5,22 +5,34 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import Button from "../button/Button";
 import { navItems } from "./constant";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function NavigationBar() {
   const pathname = usePathname();
+  const { isAdmin } = useAuth();
 
-  const shouldShow = navItems.some((item) => pathname.startsWith(item.href));
+  // Filter items based on role
+  const visibleItems = navItems.filter((item) => {
+    if (item.adminOnly && !isAdmin) return false;
+    return true;
+  });
+
+  const shouldShow = visibleItems.some((item) => pathname.startsWith(item.href));
 
   if (!shouldShow) return null;
+
+  // Calculate index positions for spacing (only for 5-item layout with main button)
+  const hasMainButton = visibleItems.some((item) => item.isMain);
+  const mainIndex = visibleItems.findIndex((item) => item.isMain);
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 rounded-t-4xl border-t bg-white shadow-lg">
       <div className="relative flex h-20 items-center justify-between px-4">
-        {navItems.map((item, index) => {
+        {visibleItems.map((item, index) => {
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
 
-          // 🔥 Floating Main Button
+          // 🔥 Floating Main Button (admin only)
           if (item.isMain) {
             return (
               <div
@@ -46,15 +58,15 @@ export default function NavigationBar() {
             );
           }
 
-          // 🔹 Normal Items
+          // 🔹 Normal Items — add spacing around the main button
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
                 "flex flex-1 flex-col items-center justify-center gap-1 transition-all duration-300",
-                index === 1 && "mr-16",
-                index === 3 && "ml-16"
+                hasMainButton && index === mainIndex - 1 && "mr-16",
+                hasMainButton && index === mainIndex + 1 && "ml-16"
               )}
             >
               <Icon

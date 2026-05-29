@@ -6,9 +6,13 @@ import {
   deletePayment,
   getPaymentById,
   getPaymentHistory,
+  getPaymentHistoryByType,
   updatePayment,
+  getDebts,
+  Debt,
 } from "../api/payment-history-fetcher";
-import { CreatePaymentInput, Payment, UpdatePaymentInput } from "../schema";
+import { CreatePaymentInput, Payment, PaymentTypeType, UpdatePaymentInput } from "../schema";
+import { useState } from "react";
 
 /**
  * Centralized Query Keys
@@ -16,11 +20,24 @@ import { CreatePaymentInput, Payment, UpdatePaymentInput } from "../schema";
 const paymentKeys = {
   all: ["payment"] as const,
   list: ["payment", "list"] as const,
+  listByType: (type: PaymentTypeType) => ["payment", "list", type] as const,
   detail: (id: string) => ["payment", "detail", id] as const,
+  debts: ["debts"] as const,
 };
 
 export function usePaymentHistory() {
   const queryClient = useQueryClient();
+  const [activeType, setActiveType] = useState<PaymentTypeType>("HUTANG_MOBIL");
+
+  /**
+   * ======================
+   * GET DEBTS
+   * ======================
+   */
+  const debtsQuery = useQuery({
+    queryKey: paymentKeys.debts,
+    queryFn: getDebts,
+  });
 
   /**
    * ======================
@@ -31,6 +48,17 @@ export function usePaymentHistory() {
     queryKey: paymentKeys.list,
     queryFn: getPaymentHistory,
     staleTime: 1000 * 60, // 1 minute
+  });
+
+  /**
+   * ======================
+   * GET BY TYPE (for tab filtering)
+   * ======================
+   */
+  const listByTypeQuery = useQuery({
+    queryKey: paymentKeys.listByType(activeType),
+    queryFn: () => getPaymentHistoryByType(activeType),
+    staleTime: 1000 * 60,
   });
 
   /**
@@ -55,6 +83,7 @@ export function usePaymentHistory() {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: paymentKeys.list });
+      queryClient.invalidateQueries({ queryKey: paymentKeys.listByType(activeType) });
     },
   });
 
@@ -72,6 +101,7 @@ export function usePaymentHistory() {
       queryClient.invalidateQueries({
         queryKey: paymentKeys.detail(variables.id),
       });
+      queryClient.invalidateQueries({ queryKey: paymentKeys.listByType(activeType) });
     },
   });
 
@@ -85,10 +115,17 @@ export function usePaymentHistory() {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: paymentKeys.list });
+      queryClient.invalidateQueries({ queryKey: paymentKeys.listByType(activeType) });
     },
   });
 
   return {
+    /**
+     * Active Type (Tab)
+     */
+    activeType,
+    setActiveType,
+
     /**
      * Queries
      */
@@ -96,6 +133,13 @@ export function usePaymentHistory() {
     isLoading: listQuery.isLoading,
     isFetching: listQuery.isFetching,
     error: listQuery.error,
+
+    paymentsByType: listByTypeQuery.data as Payment[] | undefined,
+    isLoadingByType: listByTypeQuery.isLoading,
+    isFetchingByType: listByTypeQuery.isFetching,
+
+    debts: debtsQuery.data,
+    isLoadingDebts: debtsQuery.isLoading,
 
     getDetail,
 
