@@ -1,31 +1,47 @@
-const CACHE_NAME = 'hutang-tracker-v1';
+const CACHE_NAME = 'hutang-tracker-v2';
 
 self.addEventListener('install', (event) => {
+  // Don't precache '/' because it server-redirects to '/home'. Caching a
+  // redirected response and replaying it for a navigation request is rejected
+  // by the browser ("redirected response not allowed for navigation").
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll([
-        '/',
-        '/home',
         '/icon.png',
         '/icon-512x512.png',
       ]);
     })
   );
+  self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
-  // Stale-while-revalidate strategy for PWA
+  const { request } = event;
+
+  // Network-first for navigation requests so server redirects (e.g. / -> /home)
+  // always work. Fall back to cache only when offline.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(() =>
+        caches.match(request).then((cached) => cached || caches.match('/home'))
+      )
+    );
+    return;
+  }
+
+  // Stale-while-revalidate strategy for other assets/requests
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Only cache valid GET requests to the origin
+    caches.match(request).then((cachedResponse) => {
+      const fetchPromise = fetch(request).then((networkResponse) => {
+        // Only cache valid, non-redirected GET requests to the origin
         if (
-          event.request.method === 'GET' &&
-          event.request.url.startsWith(self.location.origin) &&
-          networkResponse.status === 200
+          request.method === 'GET' &&
+          request.url.startsWith(self.location.origin) &&
+          networkResponse.status === 200 &&
+          !networkResponse.redirected
         ) {
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, networkResponse.clone());
+            cache.put(request, networkResponse.clone());
           });
         }
         return networkResponse;
@@ -49,6 +65,6 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
 });
