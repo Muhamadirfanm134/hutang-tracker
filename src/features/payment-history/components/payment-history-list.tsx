@@ -10,6 +10,8 @@ import {
 } from "../constants";
 import { usePaymentHistory } from "../hooks/use-payment-history";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 import { PaymentTypeType } from "../schema";
 import { AnimatePresence, motion } from "framer-motion";
 import { Calendar, ChevronRight, Hash, Wallet } from "lucide-react";
@@ -27,7 +29,7 @@ function PaymentSummaryCard({
   totalPayments: number;
   type: PaymentTypeType;
 }) {
-  const colors = PAYMENT_TYPE_COLORS[type];
+  const colors = PAYMENT_TYPE_COLORS[type] || { gradient: "from-gray-400 to-gray-500" };
 
   return (
     <motion.div
@@ -79,7 +81,7 @@ function PaymentCard({
   };
   index: number;
 }) {
-  const colors = PAYMENT_TYPE_COLORS[item.type];
+  const colors = PAYMENT_TYPE_COLORS[item.type] || { border: "border-gray-200", light: "bg-gray-100", text: "text-gray-700" };
 
   return (
     <motion.div
@@ -137,7 +139,8 @@ function PaymentCard({
 /**
  * Empty state
  */
-function EmptyState({ type }: { type: PaymentTypeType }) {
+function EmptyState({ type, label }: { type: PaymentTypeType; label?: string }) {
+  const displayLabel = label || getPaymentTypeLabel(type);
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -150,7 +153,7 @@ function EmptyState({ type }: { type: PaymentTypeType }) {
       </div>
       <p className="mt-4 text-sm font-medium text-gray-500">Belum ada riwayat</p>
       <p className="mt-1 text-xs text-gray-400">
-        Pembayaran {getPaymentTypeLabel(type)} akan muncul di sini
+        Pembayaran {displayLabel} akan muncul di sini
       </p>
     </motion.div>
   );
@@ -186,7 +189,17 @@ export function PaymentHistoryList() {
     setActiveType,
     paymentsByType,
     isLoadingByType,
+    debts,
   } = usePaymentHistory();
+
+  const searchParams = useSearchParams();
+  const typeParam = searchParams.get("type");
+
+  useEffect(() => {
+    if (typeParam) {
+      setActiveType(typeParam as PaymentTypeType);
+    }
+  }, [typeParam, setActiveType]);
 
   const totalAmount =
     paymentsByType?.reduce((sum, item) => sum + item.amount, 0) ?? 0;
@@ -200,9 +213,14 @@ export function PaymentHistoryList() {
       <div className="space-y-4 px-4 pt-20 pb-28">
         {/* Tab Navigation */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {PAYMENT_TYPE_TABS.map((type) => {
+          {(debts || []).map((debt) => {
+            const type = debt.payment_type_code;
             const isActive = activeType === type;
-            const colors = PAYMENT_TYPE_COLORS[type];
+            const colors = PAYMENT_TYPE_COLORS[type] || {
+              activeBg: "bg-gray-600",
+              activeText: "text-white",
+              border: "border-gray-200",
+            };
 
             return (
               <button
@@ -218,8 +236,8 @@ export function PaymentHistoryList() {
                       )
                 )}
               >
-                <span className="text-sm">{PAYMENT_TYPE_EMOJI[type]}</span>
-                <span>{getPaymentTypeLabel(type)}</span>
+                <span className="text-sm">{PAYMENT_TYPE_EMOJI[type] || "💰"}</span>
+                <span>{debt.description}</span>
               </button>
             );
           })}
@@ -254,7 +272,10 @@ export function PaymentHistoryList() {
                 ))}
               </div>
             ) : (
-              <EmptyState type={activeType} />
+              <EmptyState 
+                type={activeType} 
+                label={debts?.find(d => d.payment_type_code === activeType)?.description} 
+              />
             )}
           </motion.div>
         </AnimatePresence>

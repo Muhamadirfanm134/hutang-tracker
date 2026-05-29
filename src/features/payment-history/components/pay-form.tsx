@@ -188,7 +188,7 @@ export function PayForm() {
     );
   };
 
-  const colors = PAYMENT_TYPE_COLORS[selectedType];
+  const colors = PAYMENT_TYPE_COLORS[selectedType] || { gradient: "from-gray-400 to-gray-500", activeBg: "bg-gray-600", activeText: "text-white" };
   const isBusy = isCreating || isUploading;
 
   return (
@@ -259,9 +259,10 @@ export function PayForm() {
                 Tipe Hutang
               </label>
               <div className="flex gap-2">
-                {PAYMENT_TYPE_TABS.map((type) => {
+                {(debts || []).map((debt) => {
+                  const type = debt.payment_type_code;
                   const isActive = selectedType === type;
-                  const c = PAYMENT_TYPE_COLORS[type];
+                  const c = PAYMENT_TYPE_COLORS[type] || { activeBg: "bg-gray-600", activeText: "text-white" };
 
                   return (
                     <button
@@ -274,9 +275,9 @@ export function PayForm() {
                           : cn("border-gray-100 bg-gray-50 text-gray-500 hover:bg-gray-100")
                       )}
                     >
-                      <span className="text-lg">{PAYMENT_TYPE_EMOJI[type]}</span>
-                      <span className="text-[10px] font-semibold leading-tight">
-                        {getPaymentTypeLabel(type).replace("Hutang ", "")}
+                      <span className="text-lg">{PAYMENT_TYPE_EMOJI[type] || "💰"}</span>
+                      <span className="text-[10px] font-semibold leading-tight text-center">
+                        {debt.description.replace("Hutang ", "")}
                       </span>
                     </button>
                   );
@@ -455,6 +456,7 @@ export function PayForm() {
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {previews.map((src, i) => (
                     <div key={i} className="group relative overflow-hidden rounded-xl border border-gray-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={src}
                         alt={`Preview ${i + 1}`}

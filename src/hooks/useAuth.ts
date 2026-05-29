@@ -72,9 +72,37 @@ export function useAuth() {
   useEffect(() => {
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       queryClient.setQueryData(["session"], newSession);
-      // Refetch profile when auth state changes
+      
       if (newSession?.user) {
-        queryClient.invalidateQueries({ queryKey: ["profile", newSession.user.id] });
+        const u = newSession.user;
+        const metaName = u.user_metadata?.fullname || u.user_metadata?.full_name || u.user_metadata?.name;
+
+        // Auto-sync profile for Google/OAuth
+        if (metaName) {
+          try {
+            const { data: existingProfile } = await supabase
+              .from("profiles")
+              .select("fullname")
+              .eq("id", u.id)
+              .maybeSingle();
+
+            if (existingProfile && !existingProfile.fullname) {
+              await supabase.from("profiles").update({ fullname: metaName }).eq("id", u.id);
+            } else if (!existingProfile) {
+              await supabase.from("profiles").insert({
+                id: u.id,
+                email: u.email,
+                fullname: metaName,
+                role: "user",
+              });
+            }
+          } catch (err) {
+            console.error("Failed to sync profile:", err);
+          }
+        }
+
+        // Refetch profile when auth state changes
+        queryClient.invalidateQueries({ queryKey: ["profile", u.id] });
       }
     });
     return () => {
@@ -92,7 +120,15 @@ export function useAuth() {
     if (!user && !isAuthPage) {
       router.replace("/login");
     } else if (user && isAuthPage) {
-      router.replace("/home");
+      // Jika url mengandung OAuth fragment/query, gunakan hard reload agar tidak hang
+      if (
+        typeof window !== "undefined" &&
+        (window.location.hash.includes("access_token") || window.location.search.includes("code="))
+      ) {
+        window.location.href = "/home";
+      } else {
+        router.replace("/home");
+      }
     }
   }, [user, isLoadingSession, pathname, router]);
 
@@ -174,6 +210,27 @@ export function useAuth() {
     },
   });
 
+  // --- 🌐 GOOGLE OAUTH
+  const loginWithGoogleMutation = useMutation<void, Error>({
+    mutationFn: async () => {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/login`,
+        },
+      });
+      if (error) throw error;
+    },
+    onError: (err) => {
+      console.error("❌ Google Login failed:", err.message);
+      toast({
+        title: err.message,
+        variant: "error",
+        position: "top-center",
+      });
+    },
+  });
+
   return {
     user,
     session,
@@ -184,5 +241,6 @@ export function useAuth() {
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
+    loginWithGoogle: loginWithGoogleMutation.mutateAsync,
   };
 }

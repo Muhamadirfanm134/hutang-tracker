@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-export const PaymentTypeCodeEnum = z.enum(["HUTANG_MOBIL", "HUTANG_BAPAK", "HUTANG_MBAIPIT"]);
+export const PaymentTypeCodeEnum = z.string();
 
-export type PaymentTypeType = z.infer<typeof PaymentTypeCodeEnum>;
+export type PaymentTypeType = string;
 
 /**
  * Base Schema (match database)

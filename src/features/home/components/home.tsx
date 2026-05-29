@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Link from "next/link";
+import { Debt } from "@/features/payment-history/api/payment-history-fetcher";
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ function groupByMonth(payments: Payment[], year: number) {
   const map = new Map<string, number>();
 
   for (let i = 0; i < 12; i++) {
-    const key = dayjs().year(year).month(i).format("MMM");
+    const key = dayjs().year(year).month(i).date(1).format("MMM");
     map.set(key, 0);
   }
 
@@ -63,17 +64,24 @@ function groupByMonth(payments: Payment[], year: number) {
   return Array.from(map.entries()).map(([month, amount]) => ({ month, amount }));
 }
 
-function groupByType(payments: Payment[]) {
-  const map = new Map<PaymentTypeType, number>();
-  PAYMENT_TYPE_TABS.forEach((t) => map.set(t, 0));
+function groupByType(payments: Payment[], debts: Debt[] = []) {
+  const map = new Map<string, number>();
+  
+  // Initialize with known debts so they show up even if 0
+  debts.forEach((d) => map.set(d.payment_type_code, 0));
+  
   payments.forEach((p) => map.set(p.type, (map.get(p.type) || 0) + p.amount));
 
   return Array.from(map.entries())
-    .map(([type, amount]) => ({
-      name: getPaymentTypeLabel(type).replace("Hutang ", ""),
-      value: amount,
-      type,
-    }))
+    .map(([type, amount]) => {
+      const debt = debts.find(d => d.payment_type_code === type);
+      const name = debt ? debt.description : getPaymentTypeLabel(type);
+      return {
+        name: name.replace("Hutang ", ""),
+        value: amount,
+        type,
+      };
+    })
     .filter((item) => item.value > 0);
 }
 
@@ -160,9 +168,21 @@ function SectionHeader({
 // ─── Main Component ───────────────────────────────────────
 
 export function Home() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { payments, isLoading, debts } = usePaymentHistory();
-  const allPayments = payments ?? [];
+  const allPayments = useMemo(() => payments ?? [], [payments]);
+
+  const totalDebt = useMemo(() => {
+    return (debts || []).reduce((sum, d) => sum + (d.total_hutang || 0), 0);
+  }, [debts]);
+
+  const totalPaid = useMemo(() => {
+    return allPayments.reduce((sum, p) => sum + p.amount, 0);
+  }, [allPayments]);
+
+  const remainingDebt = useMemo(() => {
+    return Math.max(0, totalDebt - totalPaid);
+  }, [totalDebt, totalPaid]);
 
   const availableYears = useMemo(() => {
     const years = new Set<number>();
@@ -186,23 +206,24 @@ export function Home() {
   const grandTotal = allPayments.reduce((s, p) => s + p.amount, 0);
   const lastPayment = allPayments[0];
 
-  // Chart data (filtered)
+  // Chart data
   const monthlyData = groupByMonth(filteredPayments, chartYear);
-  const typeData = groupByType(filteredPayments);
+  const typeData = groupByType(allPayments, debts || []); // Use allPayments instead of filteredPayments for global distribution
   const cumulData = cumulativeData(filteredPayments);
 
+  const fallbackColor = "#64748b";
   const barColor = chartType !== "ALL"
-    ? PIE_COLORS[chartType]
+    ? (PIE_COLORS[chartType] || fallbackColor)
     : "#0ea5e9";
   const areaColor = chartType !== "ALL"
-    ? PIE_COLORS[chartType]
+    ? (PIE_COLORS[chartType] || fallbackColor)
     : "#8b5cf6";
 
   const typeOptions = [
     { value: "ALL", label: "Semua Tipe" },
-    ...PAYMENT_TYPE_TABS.map((t) => ({
-      value: t,
-      label: `${PAYMENT_TYPE_EMOJI[t]} ${getPaymentTypeLabel(t).replace("Hutang ", "")}`,
+    ...(debts || []).map((d) => ({
+      value: d.payment_type_code,
+      label: `${PAYMENT_TYPE_EMOJI[d.payment_type_code] || "💰"} ${d.description.replace("Hutang ", "")}`,
     })),
   ];
   const yearOptions = availableYears.map((y) => ({ value: String(y), label: String(y) }));
@@ -221,47 +242,125 @@ export function Home() {
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 px-5 pt-12 pb-6"
+        className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 px-5 pt-12 pb-24 text-white"
       >
-        <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/5" />
-        <div className="absolute -bottom-6 -left-6 h-24 w-24 rounded-full bg-white/5" />
+        {/* Decorative background elements */}
+        <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-indigo-500/10 blur-3xl animate-pulse" />
+        <div className="absolute top-20 -left-10 h-32 w-32 rounded-full bg-emerald-500/10 blur-3xl" />
 
-        <div className="relative">
-          <p className="text-sm text-gray-400">{greeting()} 👋</p>
-          <h1 className="mt-1 text-2xl font-bold text-white">
-            {user?.user_metadata?.fullname || user?.email?.split("@")[0] || "User"}
-          </h1>
+        <div className="relative flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{greeting()} 👋</p>
+            <h1 className="mt-1 text-2xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+              {profile?.fullname || user?.user_metadata?.fullname || user?.email?.split("@")[0] || "User"}
+            </h1>
+            <p className="text-[11px] text-slate-400 font-medium mt-0.5">{user?.email}</p>
+          </div>
+          
+          <Link href="/profile" className="group relative shrink-0">
+            <div className="relative h-12 w-12 overflow-hidden rounded-full ring-2 ring-white/10 transition-all duration-300 group-hover:scale-105 group-hover:ring-indigo-400/50 shadow-md">
+              {user?.user_metadata?.avatar_url || user?.user_metadata?.picture ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.user_metadata.avatar_url || user.user_metadata.picture}
+                  alt="Profile"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 text-sm font-bold text-white uppercase">
+                  {(profile?.fullname || user?.email || "U").substring(0, 2)}
+                </div>
+              )}
+            </div>
+            {profile?.role === "admin" && (
+              <span className="absolute -bottom-1 -right-1 flex h-4 items-center rounded-full bg-indigo-500 px-1.5 text-[8px] font-black uppercase text-white shadow-sm ring-1 ring-slate-950">
+                Admin
+              </span>
+            )}
+          </Link>
         </div>
       </motion.div>
 
-      <div className="relative space-y-4 px-4 -mt-1 z-10">
+      {/* ── Summary Card Container (overlapping header) ── */}
+      <div className="relative -mt-16 px-4 z-10">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="rounded-3xl bg-white p-5 shadow-xl border border-slate-100/80"
+        >
+          <div className="grid grid-cols-2 gap-2 text-center divide-x divide-slate-100">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Total Hutang</p>
+              <p className="mt-1 text-sm font-black text-slate-950 sm:text-base">{formatRupiah(totalDebt)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Terbayar</p>
+              <p className="mt-1 text-sm font-black text-emerald-600 sm:text-base">{formatRupiah(totalPaid)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Sisa</p>
+              <p className="mt-1 text-sm font-black text-orange-600 sm:text-base">{formatRupiah(remainingDebt)}</p>
+            </div>
+          </div>
+
+          {/* Quick Progress Bar */}
+          {totalDebt > 0 && (
+            <div className="mt-4">
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-50">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-indigo-500 transition-all duration-700"
+                  style={{ width: `${Math.min(100, Math.round((totalPaid / totalDebt) * 100))}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 font-medium">
+                <span>Progres Pelunasan</span>
+                <span className="font-bold text-slate-600">
+                  {Math.min(100, Math.round((totalPaid / totalDebt) * 100))}%
+                </span>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
+
+      <div className="relative mt-6 space-y-4 px-4 z-10">
         {/* ── Summary Cards (3 debt types) ─────────── */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="-mt-4 space-y-3"
+          className="space-y-3"
         >
-          {PAYMENT_TYPE_TABS.map((type) => {
+          {(debts || []).map((debt) => {
+            const type = debt.payment_type_code;
             const typePayments = allPayments.filter((p) => p.type === type);
             const paid = typePayments.reduce((s, p) => s + p.amount, 0);
-            const debt = debts?.find((d) => d.payment_type_code === type);
-            const total = debt?.total_hutang || 0;
+            const total = debt.total_hutang || 0;
             const remaining = Math.max(0, total - paid);
             const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
-            const colors = PAYMENT_TYPE_COLORS[type];
+            const colors = PAYMENT_TYPE_COLORS[type] || {
+              bg: "bg-gray-50",
+              text: "text-gray-700",
+              border: "border-gray-200",
+              activeBg: "bg-gray-600",
+              activeText: "text-white",
+              gradient: "from-gray-400 to-gray-500",
+              light: "bg-gray-100",
+              dot: "bg-gray-500",
+            };
 
             return (
-              <Link key={type} href="/history" className="block">
+              <Link key={type} href={`/history?type=${type}`} className="block">
                 <div className="group rounded-2xl border border-gray-100 bg-white px-5 py-4 shadow-sm transition-all hover:shadow-md">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className={cn("flex h-11 w-11 items-center justify-center rounded-xl", colors.light)}>
-                        <span className="text-xl">{PAYMENT_TYPE_EMOJI[type]}</span>
+                        <span className="text-xl">{PAYMENT_TYPE_EMOJI[type] || "💰"}</span>
                       </div>
                       <div>
                         <p className="text-[15px] font-bold text-gray-900">
-                          {getPaymentTypeLabel(type)}
+                          {debt.description}
                         </p>
                         <p className="text-xs text-gray-400">
                           {typePayments.length}x pembayaran
@@ -307,8 +406,8 @@ export function Home() {
           >
             <Link href={`/history/${lastPayment.id}`}>
               <div className="group flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md">
-                <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", PAYMENT_TYPE_COLORS[lastPayment.type].light)}>
-                  <Clock className={cn("h-5 w-5", PAYMENT_TYPE_COLORS[lastPayment.type].text)} />
+                <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", (PAYMENT_TYPE_COLORS[lastPayment.type] || { light: "bg-gray-100", text: "text-gray-500" }).light)}>
+                  <Clock className={cn("h-5 w-5", (PAYMENT_TYPE_COLORS[lastPayment.type] || { light: "bg-gray-100", text: "text-gray-500" }).text)} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Pembayaran Terakhir</p>
@@ -345,7 +444,7 @@ export function Home() {
             />
           </SectionHeader>
 
-          {filteredPayments.length > 0 ? (
+          {monthlyData.some((d) => d.amount > 0) ? (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={monthlyData} barCategoryGap="20%" margin={{ top: 10, right: 0, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
@@ -355,6 +454,7 @@ export function Home() {
                   axisLine={false} 
                   tickLine={false} 
                   dy={10}
+                  interval={0}
                 />
                 <YAxis 
                   tick={{ fontSize: 10, fill: "#9ca3af" }} 
@@ -388,7 +488,7 @@ export function Home() {
                 <PieChart>
                   <Pie data={typeData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={3} dataKey="value" strokeWidth={0}>
                     {typeData.map((item) => (
-                      <Cell key={item.type} fill={PIE_COLORS[item.type as PaymentTypeType]} />
+                      <Cell key={item.type} fill={PIE_COLORS[item.type as PaymentTypeType] || fallbackColor} />
                     ))}
                   </Pie>
                 </PieChart>
@@ -399,7 +499,7 @@ export function Home() {
                   const pct = total > 0 ? Math.round((item.value / total) * 100) : 0;
                   return (
                     <div key={item.type} className="flex items-center gap-3">
-                      <div className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[item.type as PaymentTypeType] }} />
+                      <div className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[item.type as PaymentTypeType] || fallbackColor }} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-semibold text-gray-600">
                           {item.name} <span className="text-gray-400 font-medium ml-0.5">({pct}%)</span>

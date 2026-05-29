@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { usePaymentHistory } from "../hooks/use-payment-history";
+import { usePaymentHistory, usePaymentDetail } from "../hooks/use-payment-history";
 import {
   getPaymentTypeLabel,
   PAYMENT_TYPE_COLORS,
@@ -52,7 +52,7 @@ function ImageViewer({
           height={800}
           alt="Bukti pembayaran"
           className="h-auto max-h-[85vh] w-auto rounded-2xl object-contain"
-        />
+          />
         <button
           onClick={onClose}
           className="absolute top-3 right-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/50 text-sm text-white transition hover:bg-black/70"
@@ -92,9 +92,9 @@ export function PaymentHistoryDetail() {
   const id = params.id as string;
   const [viewerPath, setViewerPath] = useState<string | null>(null);
 
-  const { getDetail, debts, payments } = usePaymentHistory();
+  const { debts, payments } = usePaymentHistory();
 
-  const { data, isLoading, isError } = getDetail(id);
+  const { data, isLoading, isError } = usePaymentDetail(id);
 
   if (isLoading) {
     return (

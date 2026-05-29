@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { FormLoginType } from "../schema";
 
 export default function useLoginForm() {
-  const { login, register, isLoading } = useAuth();
+  const { login, register, loginWithGoogle, isLoading } = useAuth();
 
   const form = useForm<FormLoginType>({
     defaultValues: {
@@ -36,5 +36,6 @@ export default function useLoginForm() {
     onRegister,
     form,
     loading: isLoading,
+    loginWithGoogle,
   };
 }

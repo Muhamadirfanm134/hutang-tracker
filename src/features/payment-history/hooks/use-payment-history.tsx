@@ -66,12 +66,8 @@ export function usePaymentHistory() {
    * GET DETAIL
    * ======================
    */
-  const getDetail = (id: string) =>
-    useQuery({
-      queryKey: paymentKeys.detail(id),
-      queryFn: () => getPaymentById(id),
-      enabled: !!id,
-    });
+  // Removed inline getDetail because it violated rules-of-hooks.
+  // Use the exported usePaymentDetail hook instead.
 
   /**
    * ======================
@@ -141,8 +137,6 @@ export function usePaymentHistory() {
     debts: debtsQuery.data,
     isLoadingDebts: debtsQuery.isLoading,
 
-    getDetail,
-
     /**
      * Mutations
      */
@@ -158,4 +152,12 @@ export function usePaymentHistory() {
     deleteAsync: deleteMutation.mutateAsync,
     isDeleting: deleteMutation.isPending,
   };
+}
+
+export function usePaymentDetail(id: string) {
+  return useQuery({
+    queryKey: paymentKeys.detail(id),
+    queryFn: () => getPaymentById(id),
+    enabled: !!id,
+  });
 }
