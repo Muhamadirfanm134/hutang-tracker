@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { usePaymentHistory, usePaymentDetail } from "../hooks/use-payment-history";
 import {
   getPaymentTypeLabel,
@@ -14,10 +14,21 @@ import { formatRupiah } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import MobileHeader from "@/components/(design-systems)/mobileHeader";
-import { Calendar, FileText, Hash, Wallet, ImageIcon } from "lucide-react";
+import {
+  Calendar,
+  FileText,
+  Hash,
+  ImageIcon,
+  Loader2,
+  Pencil,
+  Trash2,
+  Wallet,
+} from "lucide-react";
 import { PaymentTypeType } from "../schema";
 import { SupabaseImage } from "@/components/(design-systems)/supabaseImage";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import toast from "@/hooks/useToast";
 
 const BUCKET = "payment_attachment";
 
@@ -89,12 +100,39 @@ function DetailSkeleton() {
 
 export function PaymentHistoryDetail() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const [viewerPath, setViewerPath] = useState<string | null>(null);
 
-  const { debts, payments } = usePaymentHistory();
+  const { isAdmin } = useAuth();
+  const { debts, payments, deleteAsync, isDeleting } = usePaymentHistory();
 
   const { data, isLoading, isError } = usePaymentDetail(id);
+
+  const handleDelete = async () => {
+    if (!data || !isAdmin || isDeleting) return;
+
+    const confirmed = window.confirm(
+      "Hapus pembayaran ini? Data yang sudah dihapus tidak bisa dikembalikan."
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteAsync(data.id);
+      toast({
+        title: "Pembayaran berhasil dihapus",
+        variant: "success",
+        position: "top-center",
+      });
+      router.replace("/history");
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Gagal menghapus pembayaran",
+        variant: "error",
+        position: "top-center",
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -186,6 +224,32 @@ export function PaymentHistoryDetail() {
                 <span>{getPaymentTypeLabel(data.type).replace("Hutang ", "")}</span>
               </div>
             </div>
+            {isAdmin && (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => router.push(`/pay/${data.id}`)}
+                  disabled={isDeleting}
+                  className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label="Edit pembayaran"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-red-500/80 text-white backdrop-blur-sm transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label="Hapus pembayaran"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </motion.div>
 

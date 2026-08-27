@@ -1,18 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { cn, formatRupiah } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePaymentHistory } from "../hooks/use-payment-history";
-import { useAuth } from "@/hooks/useAuth";
 import {
-  getPaymentTypeLabel,
   PAYMENT_TYPE_COLORS,
   PAYMENT_TYPE_EMOJI,
-  PAYMENT_TYPE_TABS,
 } from "../constants";
-import { PaymentTypeType } from "../schema";
+import { Payment, PaymentTypeType } from "../schema";
 import MobileHeader from "@/components/(design-systems)/mobileHeader";
 import {
   Wallet,
@@ -31,21 +28,43 @@ import { useUploader } from "@/hooks/useUploader";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
+import { SupabaseImage } from "@/components/(design-systems)/supabaseImage";
 
 const BUCKET = "payment_attachment";
 
-export function PayForm() {
-  const router = useRouter();
-  const { createPayment, isCreating, debts, isLoadingDebts, payments } = usePaymentHistory();
-  const { uploadFile, uploading, progress } = useUploader(BUCKET);
-  const { user } = useAuth();
+type PayFormProps = {
+  payment?: Payment;
+};
 
-  const [selectedType, setSelectedType] = useState<PaymentTypeType>("HUTANG_MOBIL");
-  const [amount, setAmount] = useState("");
-  const [pembayaranKe, setPembayaranKe] = useState("");
-  const [note, setNote] = useState("");
-  const [createdAt, setCreatedAt] = useState<Date | undefined>(new Date());
+export function PayForm({ payment }: PayFormProps) {
+  const router = useRouter();
+  const {
+    createPayment,
+    isCreating,
+    updateAsync,
+    isUpdating,
+    debts,
+    isLoadingDebts,
+    payments,
+  } = usePaymentHistory();
+  const { uploadFile, uploading, progress } = useUploader(BUCKET);
+  const isEdit = !!payment;
+
+  const [selectedType, setSelectedType] = useState<PaymentTypeType>(
+    payment?.type ?? "HUTANG_MOBIL"
+  );
+  const [amount, setAmount] = useState(payment ? String(payment.amount) : "");
+  const [pembayaranKe, setPembayaranKe] = useState(
+    payment ? String(payment.pembayaran_ke) : ""
+  );
+  const [note, setNote] = useState(payment?.note ?? "");
+  const [createdAt, setCreatedAt] = useState<Date | undefined>(
+    payment ? dayjs(payment.created_at).toDate() : new Date()
+  );
   const [isSuccess, setIsSuccess] = useState(false);
+  const [existingAttachments, setExistingAttachments] = useState<string[]>(
+    payment?.payment_attachment ?? []
+  );
 
   // Attachment state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -65,18 +84,16 @@ export function PayForm() {
     return maxKe + 1;
   }, [payments, selectedType]);
 
-  useEffect(() => {
-    setPembayaranKe(String(nextPembayaranKe));
-  }, [nextPembayaranKe]);
-
   const numericAmount = parseInt(amount.replace(/\D/g, ""), 10) || 0;
+  const effectivePembayaranKe = pembayaranKe || String(nextPembayaranKe);
 
   const handleAmountChange = (value: string) => {
     const digits = value.replace(/\D/g, "");
     setAmount(digits);
   };
 
-  const isValid = numericAmount > 0 && parseInt(pembayaranKe) > 0 && debtId.length > 0;
+  const isValid =
+    numericAmount > 0 && parseInt(effectivePembayaranKe) > 0 && debtId.length > 0;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -105,10 +122,14 @@ export function PayForm() {
     setPreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async () => {
-    if (!isValid || isCreating || isUploading) return;
+  const removeExistingAttachment = (index: number) => {
+    setExistingAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
 
-    let attachmentPaths: string[] | undefined;
+  const handleSubmit = async () => {
+    if (!isValid || isCreating || isUpdating || isUploading) return;
+
+    let attachmentPaths: string[] = [];
 
     // Upload files if any
     if (selectedFiles.length > 0) {
@@ -143,7 +164,7 @@ export function PayForm() {
 
         const results = await Promise.all(uploadPromises);
         attachmentPaths = results.filter(Boolean) as string[];
-      } catch (err) {
+      } catch {
         toast({
           title: "Gagal mengupload bukti pembayaran",
           variant: "error",
@@ -155,16 +176,49 @@ export function PayForm() {
       setIsUploading(false);
     }
 
+    const paymentAttachment = [...existingAttachments, ...attachmentPaths];
+    const payload = {
+      debt_id: debtId,
+      type: selectedType,
+      amount: numericAmount,
+      pembayaran_ke: parseInt(effectivePembayaranKe),
+      note: note.trim() || undefined,
+      created_at: dayjs(createdAt).toISOString(),
+      payment_attachment:
+        paymentAttachment.length > 0 ? paymentAttachment : undefined,
+    };
+
+    if (isEdit) {
+      try {
+        await updateAsync({
+          id: payment.id,
+          payload: {
+            ...payload,
+            note: note.trim() || null,
+            payment_attachment: paymentAttachment,
+          },
+        });
+        setIsSuccess(true);
+        toast({
+          title: "Pembayaran berhasil diupdate",
+          variant: "success",
+          position: "top-center",
+        });
+        setTimeout(() => {
+          router.push(`/history/${payment.id}`);
+        }, 1200);
+      } catch (err) {
+        toast({
+          title: err instanceof Error ? err.message : "Gagal mengupdate pembayaran",
+          variant: "error",
+          position: "top-center",
+        });
+      }
+      return;
+    }
+
     createPayment(
-      {
-        debt_id: debtId,
-        type: selectedType,
-        amount: numericAmount,
-        pembayaran_ke: parseInt(pembayaranKe),
-        note: note.trim() || undefined,
-        created_at: dayjs(createdAt).toISOString(),
-        payment_attachment: attachmentPaths && attachmentPaths.length > 0 ? attachmentPaths : undefined,
-      },
+      payload,
       {
         onSuccess: () => {
           setIsSuccess(true);
@@ -189,11 +243,11 @@ export function PayForm() {
   };
 
   const colors = PAYMENT_TYPE_COLORS[selectedType] || { gradient: "from-gray-400 to-gray-500", activeBg: "bg-gray-600", activeText: "text-white" };
-  const isBusy = isCreating || isUploading;
+  const isBusy = isCreating || isUpdating || isUploading;
 
   return (
     <div className="min-h-screen bg-gray-50/50">
-      <MobileHeader title="Catat Pembayaran" />
+      <MobileHeader title={isEdit ? "Edit Pembayaran" : "Catat Pembayaran"} />
 
       <AnimatePresence mode="wait">
         {isSuccess ? (
@@ -216,7 +270,8 @@ export function PayForm() {
             </motion.div>
             <p className="mt-6 text-xl font-bold text-gray-900">Berhasil!</p>
             <p className="mt-1 text-sm text-gray-500">
-              Pembayaran {formatRupiah(numericAmount)} tercatat
+              Pembayaran {formatRupiah(numericAmount)}{" "}
+              {isEdit ? "diupdate" : "tercatat"}
             </p>
           </motion.div>
         ) : (
@@ -267,7 +322,10 @@ export function PayForm() {
                   return (
                     <button
                       key={type}
-                      onClick={() => setSelectedType(type)}
+                      onClick={() => {
+                        setSelectedType(type);
+                        if (!isEdit) setPembayaranKe("");
+                      }}
                       className={cn(
                         "flex flex-1 cursor-pointer flex-col items-center gap-1 rounded-xl border-2 p-3 transition-all duration-300",
                         isActive
@@ -349,7 +407,7 @@ export function PayForm() {
                 <input
                   type="number"
                   inputMode="numeric"
-                  value={pembayaranKe}
+                  value={effectivePembayaranKe}
                   onChange={(e) => setPembayaranKe(e.target.value)}
                   placeholder="1"
                   min={1}
@@ -451,6 +509,39 @@ export function PayForm() {
                 </div>
               )}
 
+              {existingAttachments.length > 0 && (
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {existingAttachments.map((path, i) => {
+                    const fullPath = path.includes("/")
+                      ? path
+                      : `${payment?.debt_id ?? debtId}/${path}`;
+
+                    return (
+                      <div
+                        key={`${path}-${i}`}
+                        className="group relative overflow-hidden rounded-xl border border-gray-200"
+                      >
+                        <SupabaseImage
+                          bucket={BUCKET}
+                          path={fullPath}
+                          width={180}
+                          height={180}
+                          alt={`Bukti pembayaran ${i + 1}`}
+                          className="aspect-square w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeExistingAttachment(i)}
+                          className="absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Preview thumbnails */}
               {previews.length > 0 && (
                 <div className="mt-3 grid grid-cols-3 gap-2">
@@ -498,7 +589,7 @@ export function PayForm() {
                     {isUploading ? "Mengupload bukti..." : "Menyimpan..."}
                   </span>
                 ) : (
-                  "Simpan Pembayaran"
+                  isEdit ? "Update Pembayaran" : "Simpan Pembayaran"
                 )}
               </button>
             </motion.div>
