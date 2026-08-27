@@ -21,6 +21,7 @@ import {
   ImageIcon,
   Loader2,
   Pencil,
+  CheckCircle2,
   Trash2,
   Wallet,
 } from "lucide-react";
@@ -29,6 +30,7 @@ import { SupabaseImage } from "@/components/(design-systems)/supabaseImage";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import toast from "@/hooks/useToast";
+import ResponsiveModal from "@/components/(design-systems)/responsiveModal";
 
 const BUCKET = "payment_attachment";
 
@@ -103,6 +105,8 @@ export function PaymentHistoryDetail() {
   const router = useRouter();
   const id = params.id as string;
   const [viewerPath, setViewerPath] = useState<string | null>(null);
+  const [isDeleteSheetOpen, setIsDeleteSheetOpen] = useState(false);
+  const [isDeleteSuccess, setIsDeleteSuccess] = useState(false);
 
   const { isAdmin } = useAuth();
   const { debts, payments, deleteAsync, isDeleting } = usePaymentHistory();
@@ -112,19 +116,18 @@ export function PaymentHistoryDetail() {
   const handleDelete = async () => {
     if (!data || !isAdmin || isDeleting) return;
 
-    const confirmed = window.confirm(
-      "Hapus pembayaran ini? Data yang sudah dihapus tidak bisa dikembalikan."
-    );
-    if (!confirmed) return;
-
     try {
       await deleteAsync(data.id);
+      setIsDeleteSheetOpen(false);
+      setIsDeleteSuccess(true);
       toast({
         title: "Pembayaran berhasil dihapus",
         variant: "success",
         position: "top-center",
       });
-      router.replace("/history");
+      setTimeout(() => {
+        router.replace("/history");
+      }, 1200);
     } catch (err) {
       toast({
         title: err instanceof Error ? err.message : "Gagal menghapus pembayaran",
@@ -189,6 +192,35 @@ export function PaymentHistoryDetail() {
   const colors = PAYMENT_TYPE_COLORS[data.type as PaymentTypeType];
   const emoji = PAYMENT_TYPE_EMOJI[data.type as PaymentTypeType];
 
+  if (isDeleteSuccess) {
+    return (
+      <div className="min-h-screen bg-gray-50/50">
+        <MobileHeader title="Detail Pembayaran" />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center justify-center px-4 pt-40"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
+            className={cn(
+              "flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br",
+              colors.gradient
+            )}
+          >
+            <CheckCircle2 className="h-12 w-12 text-white" />
+          </motion.div>
+          <p className="mt-6 text-xl font-bold text-gray-900">Berhasil!</p>
+          <p className="mt-1 text-sm text-gray-500">
+            Pembayaran sudah dihapus
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50/50">
       <MobileHeader title="Detail Pembayaran" />
@@ -237,7 +269,7 @@ export function PaymentHistoryDetail() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleDelete}
+                  onClick={() => setIsDeleteSheetOpen(true)}
                   disabled={isDeleting}
                   className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-red-500/80 text-white backdrop-blur-sm transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label="Hapus pembayaran"
@@ -252,6 +284,47 @@ export function PaymentHistoryDetail() {
             )}
           </div>
         </motion.div>
+
+        <ResponsiveModal
+          isOpen={isDeleteSheetOpen}
+          onOpenChange={setIsDeleteSheetOpen}
+          title="Hapus Pembayaran"
+        >
+          <div className="space-y-4">
+            <p className="text-center text-sm leading-6 text-gray-500">
+              Pembayaran {formatRupiah(data.amount)} akan dihapus permanen dari
+              riwayat.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteSheetOpen(false)}
+                disabled={isDeleting}
+                className="cursor-pointer rounded-2xl border border-gray-200 bg-white py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-red-500 py-3 text-sm font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Menghapus...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    Hapus
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </ResponsiveModal>
 
         {/* Detail Card */}
         <motion.div

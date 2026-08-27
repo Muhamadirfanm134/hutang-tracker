@@ -205,7 +205,7 @@ export function PayForm({ payment }: PayFormProps) {
           position: "top-center",
         });
         setTimeout(() => {
-          router.push(`/history/${payment.id}`);
+          router.replace(`/history/${payment.id}`);
         }, 1200);
       } catch (err) {
         toast({
@@ -247,7 +247,10 @@ export function PayForm({ payment }: PayFormProps) {
 
   return (
     <div className="min-h-screen bg-gray-50/50">
-      <MobileHeader title={isEdit ? "Edit Pembayaran" : "Catat Pembayaran"} />
+      <MobileHeader
+        title={isEdit ? "Edit Pembayaran" : "Catat Pembayaran"}
+        onBack={isEdit ? () => router.replace(`/history/${payment.id}`) : undefined}
+      />
 
       <AnimatePresence mode="wait">
         {isSuccess ? (
@@ -532,7 +535,8 @@ export function PayForm({ payment }: PayFormProps) {
                         <button
                           type="button"
                           onClick={() => removeExistingAttachment(i)}
-                          className="absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          className="absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white shadow-sm transition hover:bg-black/75"
+                          aria-label={`Hapus bukti pembayaran ${i + 1}`}
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -556,7 +560,8 @@ export function PayForm({ payment }: PayFormProps) {
                       <button
                         type="button"
                         onClick={() => removeFile(i)}
-                        className="absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        className="absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white shadow-sm transition hover:bg-black/75"
+                        aria-label={`Hapus preview bukti pembayaran ${i + 1}`}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>

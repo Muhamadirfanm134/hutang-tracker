@@ -113,9 +113,15 @@ export async function updatePayment(id: string, payload: UpdatePaymentInput): Pr
  * DELETE
  */
 export async function deletePayment(id: string): Promise<{ success: true }> {
-  const { error } = await supabase.from("debt_payments").delete().eq("id", id);
+  const { count, error } = await supabase
+    .from("debt_payments")
+    .delete({ count: "exact" })
+    .eq("id", id);
 
   if (error) throw new Error(error.message);
+  if (count === 0) {
+    throw new Error("Pembayaran tidak ditemukan atau tidak bisa dihapus");
+  }
 
   return { success: true };
 }

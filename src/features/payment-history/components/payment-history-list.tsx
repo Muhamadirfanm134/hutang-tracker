@@ -6,7 +6,6 @@ import {
   getPaymentTypeLabel,
   PAYMENT_TYPE_COLORS,
   PAYMENT_TYPE_EMOJI,
-  PAYMENT_TYPE_TABS,
 } from "../constants";
 import { usePaymentHistory } from "../hooks/use-payment-history";
 import Link from "next/link";
